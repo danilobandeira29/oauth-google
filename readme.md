@@ -7,4 +7,3 @@
 4. Access http://localhost:8080
 5. Click in "Login with Google"
 6. You will be redirected to Google's OAuth 2.0 page
-
