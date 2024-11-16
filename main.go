@@ -35,7 +35,12 @@ func init() {
 func main() {
 	server := http.NewServeMux()
 	server.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
-		html := `<html><body><a href="/login">Login with Google</a></body></html>`
+		html := `
+<html>
+	<body>
+		<a href="/login">Login with Google</a>
+	</body>
+</html>`
 		if _, err := fmt.Fprint(w, html); err != nil {
 			log.Fatalf("error when trying to return to client %v\n", err)
 		}
@@ -44,10 +49,10 @@ func main() {
 		url := CONFIG.AuthCodeURL("random-state", oauth2.AccessTypeOffline)
 		http.Redirect(w, r, url, http.StatusFound)
 	})
-	server.HandleFunc("GET /callback", HandlerCallback)
-	server.HandleFunc("GET /profile", HandlerProfile)
-	server.HandleFunc("GET /token", HandlerToken)
-	server.HandleFunc("GET /files", HandlerFiles)
+	server.HandleFunc("GET /callback", handlerCallback)
+	server.HandleFunc("GET /profile", handlerProfile)
+	server.HandleFunc("GET /token", handlerToken)
+	server.HandleFunc("GET /files", handlerFiles)
 	fmt.Println("server running at http://localhost:8080")
 	log.Fatalln(http.ListenAndServe(":8080", server))
 }

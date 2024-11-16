@@ -9,7 +9,7 @@ import (
 	"net/http"
 )
 
-func HandlerCallback(w http.ResponseWriter, r *http.Request) {
+func handlerCallback(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Query().Get("state") != "random-state" {
 		http.Error(w, "invalid state parameter", http.StatusBadRequest)
 		return
@@ -34,8 +34,8 @@ func HandlerCallback(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func HandlerProfile(w http.ResponseWriter, r *http.Request) {
-	req, err := http.NewRequest("GET", "https://www.googleapis.com/oauth2/v1/userinfo?alt=json", nil)
+func handlerProfile(w http.ResponseWriter, r *http.Request) {
+	req, err := http.NewRequest("GET", "https://www.googleapis.com/oauth2/v3/userinfo", nil)
 	if err != nil {
 		log.Fatalf("cannot create request to see user's profile %v\n", err)
 	}
@@ -78,7 +78,7 @@ func HandlerProfile(w http.ResponseWriter, r *http.Request) {
 
 }
 
-func HandlerToken(w http.ResponseWriter, r *http.Request) {
+func handlerToken(w http.ResponseWriter, r *http.Request) {
 	req, err := http.NewRequest("GET", "https://oauth2.googleapis.com/tokeninfo?access_token="+TOKEN.AccessToken, nil)
 	if err != nil {
 		log.Fatalf("cannot create request to get user's token info %v\n", err)
@@ -110,7 +110,7 @@ func HandlerToken(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func HandlerFiles(w http.ResponseWriter, r *http.Request) {
+func handlerFiles(w http.ResponseWriter, r *http.Request) {
 	req, err := http.NewRequest("GET", "https://www.googleapis.com/drive/v3/files", nil)
 	if err != nil {
 		log.Fatalf("cannot create request to see drive's files %v\n", err)
