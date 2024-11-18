@@ -40,32 +40,6 @@ func handlerCallback(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "error when trying to decode claims", http.StatusInternalServerError)
 		return
 	}
-	req, err := http.NewRequest("GET", provider.UserInfoEndpoint(), nil)
-	if err != nil {
-		http.Error(w, "error when trying to create request for UserInfoEndpoint", http.StatusInternalServerError)
-		return
-	}
-	req.Header.Set("Authorization", "Bearer "+token.AccessToken)
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		http.Error(w, "error when trying to get user's info from identity provider", http.StatusInternalServerError)
-		return
-	}
-	defer func(r io.ReadCloser) {
-		if errClose := r.Close(); errClose != nil {
-			log.Printf("callback: error when trying to close resp body %v\n", errClose)
-		}
-	}(resp.Body)
-	result := make(map[string]interface{})
-	err = json.NewDecoder(resp.Body).Decode(&result)
-	if err != nil {
-		http.Error(w, "cannot decode json", http.StatusInternalServerError)
-		return
-	}
-	fmt.Printf("User's info: %v\n", result)
-	fmt.Printf("ID Token: %s\n", rawIDToken)
-	fmt.Printf("Access Token: %s\n", token.AccessToken)
 	html := fmt.Sprintf(`
 <html>
 	<body>
