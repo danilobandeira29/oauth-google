@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strings"
 )
 
 func handlerCallback(w http.ResponseWriter, r *http.Request) {
@@ -14,21 +15,67 @@ func handlerCallback(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid state parameter", http.StatusBadRequest)
 		return
 	}
-	code := r.URL.Query().Get("code")
-	tokenEx, err := CONFIG.Exchange(context.Background(), code)
-	TOKEN = tokenEx
+	tokenEx, err := config.Exchange(context.Background(), r.URL.Query().Get("code"))
 	if err != nil {
 		http.Error(w, "error when trying to exchange code for token", http.StatusBadRequest)
+		log.Printf("error when trying to exchange code for token %v\n", err)
 		return
 	}
-	html := `
+	token = tokenEx
+	rawIDToken, ok := token.Extra("id_token").(string)
+	if !ok {
+		http.Error(w, "id_token not found", http.StatusInternalServerError)
+		return
+	}
+	idToken, err := verifier.Verify(context.Background(), rawIDToken)
+	if err != nil {
+		http.Error(w, "invalid id_token", http.StatusInternalServerError)
+		return
+	}
+	var claims struct {
+		Email string `json:"email"`
+		Name  string `json:"name"`
+	}
+	if err = idToken.Claims(&claims); err != nil {
+		http.Error(w, "error when trying to decode claims", http.StatusInternalServerError)
+		return
+	}
+	req, err := http.NewRequest("GET", provider.UserInfoEndpoint(), nil)
+	if err != nil {
+		http.Error(w, "error when trying to create request for UserInfoEndpoint", http.StatusInternalServerError)
+		return
+	}
+	req.Header.Set("Authorization", "Bearer "+token.AccessToken)
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		http.Error(w, "error when trying to get user's info from identity provider", http.StatusInternalServerError)
+		return
+	}
+	defer func(r io.ReadCloser) {
+		if errClose := r.Close(); errClose != nil {
+			log.Printf("callback: error when trying to close resp body %v\n", errClose)
+		}
+	}(resp.Body)
+	result := make(map[string]interface{})
+	err = json.NewDecoder(resp.Body).Decode(&result)
+	if err != nil {
+		http.Error(w, "cannot decode json", http.StatusInternalServerError)
+		return
+	}
+	fmt.Printf("User's info: %v\n", result)
+	fmt.Printf("ID Token: %s\n", rawIDToken)
+	fmt.Printf("Access Token: %s\n", token.AccessToken)
+	html := fmt.Sprintf(`
 <html>
 	<body>
+		<p>Welcome back, %s</p>
+		<p>Your email is: %s</p>
 		<a href="/files" style="display: block;">See User's Google Drive files names</a>
 		<a href="/token" style="display: block;">See Token details</a>
 	</body>
 </html>
-`
+`, strings.Split(claims.Name, " ")[0], claims.Email[:3]+"*********@******")
 	if _, errFprint := fmt.Fprintf(w, html); errFprint != nil {
 		log.Fatalf("cannot send response to the client %v\n", errFprint)
 	}
@@ -39,7 +86,7 @@ func handlerProfile(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Fatalf("cannot create request to see user's profile %v\n", err)
 	}
-	req.Header.Set("Authorization", "Bearer "+TOKEN.AccessToken)
+	req.Header.Set("Authorization", "Bearer "+token.AccessToken)
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -79,7 +126,21 @@ func handlerProfile(w http.ResponseWriter, r *http.Request) {
 }
 
 func handlerToken(w http.ResponseWriter, r *http.Request) {
-	req, err := http.NewRequest("GET", "https://oauth2.googleapis.com/tokeninfo?access_token="+TOKEN.AccessToken, nil)
+	if token == nil {
+		html := `
+<html>
+	<body>
+	<p>You need to login to be able to see token's details</p>
+		<a href="/login">Login with Google</a>
+	</body>
+</html `
+		w.WriteHeader(http.StatusUnauthorized)
+		if _, err := w.Write([]byte(html)); err != nil {
+			log.Printf("token: error when tryint to send response to client %v\n", err)
+		}
+		return
+	}
+	req, err := http.NewRequest("GET", "https://oauth2.googleapis.com/tokeninfo?access_token="+token.AccessToken, nil)
 	if err != nil {
 		log.Fatalf("cannot create request to get user's token info %v\n", err)
 	}
@@ -91,7 +152,6 @@ func handlerToken(w http.ResponseWriter, r *http.Request) {
 	defer func(b io.ReadCloser) {
 		if errClose := b.Close(); errClose != nil {
 			log.Printf("cannot close body %v\n", errClose)
-			return
 		}
 	}(resp.Body)
 	body, err := io.ReadAll(resp.Body)
@@ -115,7 +175,7 @@ func handlerFiles(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Fatalf("cannot create request to see drive's files %v\n", err)
 	}
-	req.Header.Set("Authorization", "Bearer "+TOKEN.AccessToken)
+	req.Header.Set("Authorization", "Bearer "+token.AccessToken)
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {

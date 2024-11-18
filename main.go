@@ -1,7 +1,9 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/joho/godotenv"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
@@ -10,8 +12,12 @@ import (
 	"os"
 )
 
-var TOKEN *oauth2.Token
-var CONFIG oauth2.Config
+var (
+	token    *oauth2.Token
+	config   *oauth2.Config
+	provider *oidc.Provider
+	verifier *oidc.IDTokenVerifier
+)
 
 func init() {
 	err := godotenv.Load()
@@ -23,13 +29,18 @@ func init() {
 	if clientId == "" || clientSecret == "" {
 		log.Fatalf("env variable 'CLIENT_ID' and 'CLIENT_SECRET' are mandatory\n")
 	}
-	CONFIG = oauth2.Config{
+	provider, err = oidc.NewProvider(context.Background(), "https://accounts.google.com")
+	if err != nil {
+		log.Fatalf("error when instantiate new OIDC provider %v\n", err)
+	}
+	config = &oauth2.Config{
 		ClientID:     os.Getenv("CLIENT_ID"),
 		ClientSecret: os.Getenv("CLIENT_SECRET"),
 		Endpoint:     google.Endpoint,
 		RedirectURL:  "http://localhost:8080/callback",
-		Scopes:       []string{"https://www.googleapis.com/auth/drive.readonly", "https://www.googleapis.com/auth/userinfo.profile"},
+		Scopes:       []string{oidc.ScopeOpenID, "https://www.googleapis.com/auth/drive.readonly", "https://www.googleapis.com/auth/userinfo.profile", "profile", "email"},
 	}
+	verifier = provider.Verifier(&oidc.Config{ClientID: clientId})
 }
 
 func main() {
@@ -46,7 +57,7 @@ func main() {
 		}
 	})
 	server.HandleFunc("GET /login", func(w http.ResponseWriter, r *http.Request) {
-		url := CONFIG.AuthCodeURL("random-state", oauth2.AccessTypeOffline)
+		url := config.AuthCodeURL("random-state", oauth2.AccessTypeOnline)
 		http.Redirect(w, r, url, http.StatusFound)
 	})
 	server.HandleFunc("GET /callback", handlerCallback)
